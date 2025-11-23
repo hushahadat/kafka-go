@@ -1,46 +1,65 @@
 package main
 
 import (
-	"context"
-	"fmt"
-	"log"
-	"time"
+    "context"
+    "encoding/json"
+    "fmt"
+    "log"
+    "time"
 
-	"github.com/segmentio/kafka-go"
+    "github.com/segmentio/kafka-go"
 )
 
+type Order struct {
+    ID        string  `json:"id"`
+    UserID    string  `json:"userId"`
+    Amount    float64 `json:"amount"`
+    Currency  string  `json:"currency"`
+    CreatedAt string  `json:"createdAt"`
+}
+
 func main() {
-	// Create writer (producer)
-	writer := &kafka.Writer{
-		Addr:                   kafka.TCP("localhost:9092"),
-		Topic:                  "orders",
-		Balancer:               &kafka.LeastBytes{},
-		AllowAutoTopicCreation: false, // we already created the topic
-	}
+    writer := &kafka.Writer{
+        Addr:                   kafka.TCP("localhost:9092"),
+        Topic:                  "orders",
+        Balancer:               &kafka.LeastBytes{},
+        AllowAutoTopicCreation: true, // topic already exists, but safe
+    }
+    defer func() {
+        if err := writer.Close(); err != nil {
+            log.Println("failed to close writer:", err)
+        }
+    }()
 
-	defer func() {
-		if err := writer.Close(); err != nil {
-			log.Println("failed to close writer:", err)
-		}
-	}()
+    ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+    defer cancel()
 
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	defer cancel()
+    for i := 1; i <= 5; i++ {
+        order := Order{
+            ID:        fmt.Sprintf("order-%d", i),
+            UserID:    fmt.Sprintf("user-%d", i),
+            Amount:    float64(100 * i),
+            Currency:  "INR",
+            CreatedAt: time.Now().Format(time.RFC3339),
+        }
 
-	for i := 1; i <= 5; i++ {
-		value := fmt.Sprintf("OrderID: %d, Amount: %d", i, 100*i)
+        // Convert struct → JSON
+        valueBytes, err := json.Marshal(order)
+        if err != nil {
+            log.Fatalf("failed to marshal order: %v", err)
+        }
 
-		msg := kafka.Message{
-			Key:   []byte(fmt.Sprintf("order-%d", i)),
-			Value: []byte(value),
-		}
+        msg := kafka.Message{
+            Key:   []byte(order.ID),
+            Value: valueBytes,
+        }
 
-		log.Printf("Sending message %d: %s\n", i, value)
+        log.Printf("Producing order: %s\n", valueBytes)
 
-		if err := writer.WriteMessages(ctx, msg); err != nil {
-			log.Fatalf("failed to write message %d: %v", i, err)
-		}
-	}
+        if err := writer.WriteMessages(ctx, msg); err != nil {
+            log.Fatalf("failed to write message: %v", err)
+        }
+    }
 
-	log.Println("All messages sent successfully!")
+    log.Println("All orders produced successfully!")
 }
