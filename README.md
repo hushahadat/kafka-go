@@ -13,4 +13,14 @@ This repository contains a minimal local setup of **Apache Kafka (KRaft mode)** 
 ---
 
 ## 📦 Folder Structure
+├── docker-compose.yml
+├── producer.go
+└── README.md
 
+---
+
+## 🐳 Start Kafka (KRaft Mode)
+
+```sh
+docker compose up -d
+docker ps 
